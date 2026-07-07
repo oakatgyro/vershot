@@ -71,6 +71,48 @@ introduced.
 - [ ] Text is legible on a phone at 30 % size
 - [ ] End card holds ≥ 4 s with the URL
 
+## Second take — `spec-to-slack.html` (vershot specs concept)
+
+Same strategy, different story: `src/frontend/demo/spec-to-slack.html` is a
+recordable simulation of the **spec assistant** concept. One keypress (`A`)
+plays the whole ~60 s take; `src/frontend/demo/record.mjs` can record it
+headlessly with Playwright when no Mac is at hand.
+
+| Beat | Time | On screen (prototype scene) | Caption (burned in) |
+| ---- | ---- | --------------------------- | ------------------- |
+| 1 Hook | 0–5 s | Title card: logo, "vershot specs" | "Your spec knows the answer. Nobody can find it." |
+| 2 Question | 5–15 s | Slack-style app, #customer-eng: Mara asks for SAML SSO + API rate limit, camera pushes in | "4:52 PM. Sales needs the exact spec — in five minutes." |
+| 3 Ask | 15–33 s | Camera glides to a phone (mobile web app): type the question → loading → answer streams with **600 req/min** + source chip | "Ask the spec — in plain English." / "The spec answers — with the source." |
+| 4 Copy | 33–38 s | Zoom onto the answer card, spotlight cursor clicks **Copy answer** → "✓ Copied" | "One tap — copy the answer." |
+| 5 Paste | 38–54 s | Camera glides to the Slack composer, `⌘V`, message posts with "answered with vershot specs" chip, Mara reacts 🙌, pull back to wide | "Paste it where the question lives — receipt included." |
+| 6 End | 54 s → hold | End card: logo, tagline, URL | "vershot specs — ask the spec. Ship the answer. vershot.app" |
+
+Narrative rule again: **one story, one number** — `600 requests/min` appears
+in the phone answer and in the pasted Slack message; nothing else is introduced.
+
+### Zoom & cursor emphasis — unknown-unknown, resolved
+
+"How do I zoom into the Mac app, and make the cursor captivating?" has two
+answers; the second take uses the first one:
+
+1. **Bake it into the prototype (used here, $0).** The entire fake desktop
+   sits inside a `#camera` div; one CSS transform
+   (`scale(s) translate(960-x, 540-y)` with a slow `cubic-bezier` ease)
+   pushes in on any stage point, and clamping the centre keeps the frame
+   from ever showing past the desktop edge. The cursor is a DOM element with
+   a breathing radial-gradient halo and an expanding ring animation on every
+   click. Because zoom and cursor are part of the page, the screen recording
+   needs **no post-production at all**, and every take is pixel-identical.
+2. **Do it to a real recording (for live-product footage later).**
+   - [Screen Studio](https://screen.studio) (~$20+) — automatic smooth zooms
+     toward clicks and cursor easing/enlargement; the single biggest
+     "looks professional" lever for a non-editor.
+   - macOS built-ins: Accessibility → Zoom (`⌃`+scroll, enable "smooth
+     images") for live push-ins; Accessibility → Display → Pointer size +
+     "Shake mouse pointer to locate" for a bigger, findable cursor.
+   - Free post path: any editor (iMovie/CapCut) can keyframe scale+position
+     on the clip — same effect, more labour, do it after picture-lock.
+
 ## Blindspot pass — surfaced unknowns (design & video)
 
 These are the design/video unknown-unknowns this exercise converted into

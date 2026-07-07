@@ -1,0 +1,770 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>vershot specs — spec-to-slack concept demo</title>
+</head>
+<body>
+<style>
+  :root {
+    --ink0: #06080e;
+    --ink1: #0c1120;
+    --glass: rgba(13, 16, 26, 0.62);
+    --glass-hi: rgba(255, 255, 255, 0.13);
+    --txt: #f3f5f9;
+    --dim: #98a1b3;
+    --faint: #5c6577;
+    --ember: #ff9e57;
+    --ember-soft: #ffc38a;
+    --ok: #7fd6a4;
+    --plum: #201628;      /* slack-ish sidebar */
+    --plum-hi: #2e2138;
+    --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+    --serif: ui-serif, "New York", Georgia, serif;
+    --mono: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; background: #000; overflow: hidden; }
+  body { font-family: var(--sans); color: var(--txt); -webkit-font-smoothing: antialiased; }
+
+  /* ---------- stage: fixed 1920x1080 design space, scaled to fit ---------- */
+  #frame { position: fixed; inset: 0; display: grid; place-items: center; background: #000; }
+  #stage {
+    position: relative; width: 1920px; height: 1080px;
+    transform-origin: center center; overflow: hidden;
+    background: var(--ink0);
+  }
+
+  /* ---------- camera: everything inside gets the cinematic zoom/pan ----------
+     The whole desktop lives in #camera. Zooming = one CSS transform
+     (scale + translate) with a slow ease — the Screen-Studio effect,
+     baked into the prototype so the recording needs no post at all.  */
+  #camera {
+    position: absolute; inset: 0; transform-origin: 50% 50%;
+    transition: transform 1.7s cubic-bezier(0.65, 0, 0.28, 1);
+    will-change: transform;
+  }
+
+  /* ---------- wallpaper ---------- */
+  .wallpaper {
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(1100px 700px at 22% 108%, rgba(201, 111, 46, 0.5), transparent 62%),
+      radial-gradient(900px 560px at 30% 116%, rgba(255, 158, 87, 0.28), transparent 55%),
+      radial-gradient(1400px 900px at 82% -12%, rgba(40, 62, 110, 0.75), transparent 60%),
+      radial-gradient(1000px 800px at 60% 40%, rgba(21, 30, 54, 0.9), transparent 70%),
+      linear-gradient(180deg, #0a0f1d 0%, #0b1020 55%, #120e16 100%);
+  }
+  .wallpaper::after {
+    content: ""; position: absolute; inset: 0; opacity: 0.05; mix-blend-mode: overlay;
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2"/></filter><rect width="240" height="240" filter="url(%23n)" opacity="1"/></svg>');
+  }
+
+  /* ---------- menu bar ---------- */
+  .menubar {
+    position: absolute; top: 0; left: 0; right: 0; height: 38px; z-index: 5;
+    display: flex; align-items: center; gap: 28px; padding: 0 24px;
+    font-size: 15px; font-weight: 500; color: rgba(255, 255, 255, 0.85);
+    background: rgba(10, 12, 20, 0.4); backdrop-filter: blur(30px);
+  }
+  .menubar .appname { font-weight: 700; }
+  .menubar .mitem { opacity: 0.75; font-weight: 400; }
+  .menubar .spacer { flex: 1; }
+  .menubar .clock { font-weight: 500; opacity: 0.9; }
+
+  /* ---------- generic window chrome ---------- */
+  .window {
+    position: absolute; z-index: 4; border-radius: 14px; overflow: hidden;
+    background: #171a22;
+    box-shadow: 0 42px 110px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.08);
+    opacity: 0; transform: translateY(26px) scale(0.985);
+    transition: opacity 0.7s ease, transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .window.on { opacity: 1; transform: none; }
+  .titlebar {
+    height: 46px; display: flex; align-items: center; padding: 0 16px; gap: 14px;
+    background: #1e222c; border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+  .lights { display: flex; gap: 8px; }
+  .lights i { width: 13px; height: 13px; border-radius: 50%; display: block; }
+  .lights i:nth-child(1) { background: #ff5f57; }
+  .lights i:nth-child(2) { background: #febc2e; }
+  .lights i:nth-child(3) { background: #28c840; }
+  .wintitle { flex: 1; text-align: center; font-size: 14px; color: var(--dim); margin-right: 55px; }
+
+  /* ---------- slack-style window ---------- */
+  #slackwin { left: 80px; top: 96px; width: 1170px; height: 852px; }
+  .slackui { position: absolute; inset: 46px 0 0 0; display: flex; background: #14171f; }
+  .schan { width: 258px; background: var(--plum); padding: 18px 0; display: flex; flex-direction: column; }
+  .schan .ws { display: flex; align-items: center; gap: 10px; padding: 0 18px 16px; font-weight: 800; font-size: 17px; letter-spacing: -0.01em; border-bottom: 1px solid rgba(255,255,255,0.07); margin-bottom: 14px; }
+  .schan .ws .wbadge { width: 26px; height: 26px; border-radius: 7px; background: linear-gradient(140deg, var(--ember), #c96f2e); display: grid; place-items: center; font-size: 14px; color: #1a1108; }
+  .schan .grp { font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255,255,255,0.4); padding: 12px 18px 6px; }
+  .chn { display: flex; align-items: center; gap: 9px; padding: 6px 18px; font-size: 15px; color: rgba(255,255,255,0.62); }
+  .chn .h { opacity: 0.5; font-weight: 600; }
+  .chn.sel { background: var(--plum-hi); color: #fff; font-weight: 600; box-shadow: inset 3px 0 0 var(--ember); }
+  .chn .ic { width: 9px; height: 9px; border-radius: 50%; background: var(--ok); }
+  .smain { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .shead { height: 58px; display: flex; align-items: center; gap: 14px; padding: 0 24px; border-bottom: 1px solid rgba(255,255,255,0.07); }
+  .shead b { font-size: 17px; }
+  .shead .topic { font-size: 13.5px; color: var(--faint); overflow: hidden; white-space: nowrap; }
+  .smsgs { flex: 1; padding: 18px 26px 8px; display: flex; flex-direction: column; justify-content: flex-end; gap: 4px; overflow: hidden; }
+  .msg { display: flex; gap: 13px; padding: 9px 6px; border-radius: 9px; opacity: 1; }
+  .msg.pop { animation: mpop 0.5s cubic-bezier(0.22, 1, 0.36, 1); }
+  @keyframes mpop { 0% { opacity: 0; transform: translateY(14px); } 100% { opacity: 1; transform: none; } }
+  .msg .av { width: 40px; height: 40px; border-radius: 9px; flex: none; display: grid; place-items: center; font-weight: 800; font-size: 17px; color: #10131b; }
+  .msg .nm { font-weight: 750; font-size: 15.5px; }
+  .msg .tm { font-size: 12px; color: var(--faint); margin-left: 8px; font-weight: 400; }
+  .msg .tx { font-size: 15.5px; line-height: 1.5; color: #d8dde7; margin-top: 2px; max-width: 780px; }
+  .msg .tx .hl { color: var(--ember-soft); font-weight: 600; }
+  .viachip { display: inline-flex; align-items: center; gap: 7px; margin-top: 8px; font-size: 12.5px; color: var(--ember-soft); background: rgba(255,158,87,0.09); border: 1px solid rgba(255,158,87,0.25); padding: 4px 10px; border-radius: 100px; }
+  .react { display: none; align-items: center; gap: 6px; margin-top: 8px; font-size: 13px; width: fit-content; padding: 3px 10px; border-radius: 100px; background: rgba(255,158,87,0.1); border: 1px solid rgba(255,158,87,0.3); color: var(--ember-soft); font-weight: 600; }
+  .react.on { display: flex; animation: mpop 0.4s cubic-bezier(0.22, 1, 0.36, 1); }
+  .typing { display: none; align-items: center; gap: 10px; padding: 4px 6px 10px 59px; font-size: 13px; color: var(--faint); }
+  .typing.on { display: flex; }
+  .typing .td { display: flex; gap: 4px; }
+  .typing .td i { width: 6px; height: 6px; border-radius: 50%; background: var(--faint); animation: th 1s ease-in-out infinite; }
+  .typing .td i:nth-child(2) { animation-delay: 0.15s; } .typing .td i:nth-child(3) { animation-delay: 0.3s; }
+  .composer { margin: 6px 26px 22px; border: 1.5px solid rgba(255,255,255,0.13); border-radius: 12px; background: #191d27; transition: border-color 0.3s, box-shadow 0.3s; }
+  .composer.focus { border-color: rgba(255,158,87,0.6); box-shadow: 0 0 0 4px rgba(255,158,87,0.12); }
+  .composer .cin { min-height: 52px; padding: 15px 16px 6px; font-size: 15.5px; line-height: 1.5; color: #d8dde7; }
+  .composer .cin .ph { color: var(--faint); }
+  .composer .cin.flash { animation: pasteflash 0.7s ease-out; }
+  @keyframes pasteflash { 0% { background: rgba(255,158,87,0.22); } 100% { background: transparent; } }
+  .composer .crow { display: flex; align-items: center; gap: 16px; padding: 4px 12px 10px; color: var(--faint); font-size: 15px; }
+  .composer .crow .spacer { flex: 1; }
+  #sendbtn { width: 34px; height: 30px; border-radius: 8px; display: grid; place-items: center; background: rgba(255,255,255,0.06); color: var(--faint); transition: all 0.3s; }
+  #sendbtn.ready { background: linear-gradient(180deg, var(--ember-soft), var(--ember)); color: #1a1108; box-shadow: 0 4px 16px rgba(255,158,87,0.35); }
+
+  /* ---------- phone (mobile web app) ---------- */
+  #phone {
+    position: absolute; z-index: 6; left: 1330px; top: 112px; width: 430px; height: 880px;
+    border-radius: 58px; background: #05060a;
+    box-shadow: 0 50px 120px rgba(0,0,0,0.7), 0 0 0 2px rgba(255,255,255,0.14), inset 0 0 0 10px #05060a, inset 0 0 0 11px rgba(255,255,255,0.06);
+    opacity: 0; transform: translateY(30px) scale(0.98);
+    transition: opacity 0.7s ease, transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  #phone.on { opacity: 1; transform: none; }
+  .screen { position: absolute; inset: 10px; border-radius: 48px; overflow: hidden; background: #0b0e16; display: flex; flex-direction: column; }
+  .sbar { height: 48px; display: flex; align-items: center; justify-content: space-between; padding: 10px 30px 0; font-size: 15px; font-weight: 650; }
+  .island { position: absolute; left: 50%; top: 20px; transform: translateX(-50%); width: 112px; height: 30px; border-radius: 100px; background: #000; }
+  .sbar .sig { display: flex; gap: 5px; align-items: center; font-size: 13px; }
+  .urlrow { display: flex; justify-content: center; padding: 8px 20px 4px; }
+  .urlpill { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--dim); background: rgba(255,255,255,0.07); padding: 7px 16px; border-radius: 100px; }
+  .urlpill .lock { width: 9px; height: 11px; border: 1.5px solid var(--faint); border-radius: 3px; }
+  .apphead { display: flex; align-items: center; gap: 10px; padding: 14px 22px 12px; border-bottom: 1px solid rgba(255,255,255,0.07); }
+  .apphead .an { font-weight: 800; font-size: 18px; letter-spacing: -0.01em; }
+  .apphead .an i { font-style: normal; color: var(--ember); }
+  .apphead .vpill { margin-left: auto; font-size: 11.5px; color: var(--ember-soft); background: rgba(255,158,87,0.1); border: 1px solid rgba(255,158,87,0.3); padding: 4px 10px; border-radius: 100px; font-weight: 600; }
+  .appbody { flex: 1; padding: 18px 18px 10px; display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
+  .hello { color: var(--dim); font-size: 14.5px; line-height: 1.55; padding: 0 4px; }
+  .sugs { display: flex; flex-wrap: wrap; gap: 8px; }
+  .sug { font-size: 13px; color: var(--dim); border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); padding: 7px 13px; border-radius: 100px; }
+  .qbub {
+    align-self: flex-end; max-width: 88%; font-size: 15px; line-height: 1.5;
+    background: rgba(255, 158, 87, 0.14); border: 1px solid rgba(255, 158, 87, 0.3);
+    padding: 12px 15px; border-radius: 16px 16px 4px 16px;
+    display: none;
+  }
+  .qbub.on { display: block; animation: mpop 0.45s cubic-bezier(0.22, 1, 0.36, 1); }
+  #ploading { display: none; gap: 10px; align-items: center; padding: 6px 4px; }
+  #ploading.on { display: flex; }
+  #ploading .dots { display: flex; gap: 6px; }
+  #ploading .dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--ember); animation: th 1s ease-in-out infinite; }
+  #ploading .dots i:nth-child(2) { animation-delay: 0.15s; } #ploading .dots i:nth-child(3) { animation-delay: 0.3s; }
+  @keyframes th { 0%, 100% { opacity: 0.25; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1.1); } }
+  #ploading .lt { font-size: 13px; color: var(--faint); }
+  #acard {
+    border-radius: 16px 16px 16px 4px; background: #151927; border: 1px solid rgba(255,255,255,0.09);
+    padding: 15px 16px 13px; display: none;
+  }
+  #acard.on { display: block; animation: mpop 0.45s cubic-bezier(0.22, 1, 0.36, 1); }
+  #ans { font-size: 15px; line-height: 1.6; color: #e2e7f0; min-height: 40px; }
+  #ans b { color: var(--ember-soft); font-weight: 700; }
+  #ans span { opacity: 0; transition: opacity 0.28s; }
+  #ans span.w { opacity: 1; }
+  #srcchip {
+    margin-top: 12px; display: flex; align-items: center; gap: 9px;
+    font-size: 12px; color: var(--dim); background: rgba(255,255,255,0.045);
+    border: 1px solid rgba(255,255,255,0.09); padding: 8px 11px; border-radius: 10px;
+    opacity: 0; transform: translateY(6px); transition: all 0.5s ease;
+  }
+  #srcchip.on { opacity: 1; transform: none; }
+  #srcchip .doc { width: 26px; height: 32px; border-radius: 5px; background: #10131d; border: 1px solid rgba(255,255,255,0.12); flex: none; position: relative; }
+  #srcchip .doc::after { content: ""; position: absolute; left: 5px; right: 5px; top: 7px; height: 3px; border-radius: 2px; background: rgba(255,158,87,0.7); box-shadow: 0 7px 0 rgba(255,255,255,0.18), 0 14px 0 rgba(255,255,255,0.12); }
+  #actrow { display: flex; gap: 10px; margin-top: 12px; opacity: 0; transform: translateY(6px); transition: all 0.5s ease 0.1s; }
+  #actrow.on { opacity: 1; transform: none; }
+  #copybtn {
+    display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700;
+    color: #1a1108; background: linear-gradient(180deg, var(--ember-soft), var(--ember));
+    padding: 10px 16px; border-radius: 100px; box-shadow: 0 6px 20px rgba(255,158,87,0.3);
+    transition: all 0.25s;
+  }
+  #copybtn.done { color: #0d1a12; background: linear-gradient(180deg, #a9e8c4, var(--ok)); box-shadow: 0 6px 20px rgba(127,214,164,0.3); }
+  .ghostbtn { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: var(--dim); border: 1px solid rgba(255,255,255,0.14); padding: 10px 16px; border-radius: 100px; }
+  .pinrow { margin-top: auto; display: flex; align-items: center; gap: 10px; padding: 10px 4px 14px; }
+  #pinput {
+    flex: 1; min-height: 48px; border-radius: 100px; border: 1.5px solid rgba(255,255,255,0.13);
+    background: rgba(255,255,255,0.05); padding: 12px 18px; font-size: 15px; color: var(--txt);
+    white-space: nowrap; overflow: hidden; display: flex; align-items: center;
+  }
+  #pinput .ph { color: var(--faint); }
+  #pinput.tail { justify-content: flex-end; } /* keep the tail of long questions visible while typing */
+  #askbtn {
+    width: 48px; height: 48px; border-radius: 50%; flex: none; display: grid; place-items: center;
+    background: rgba(255,255,255,0.07); color: var(--faint); transition: all 0.3s; font-size: 18px;
+  }
+  #askbtn.ready { background: linear-gradient(180deg, var(--ember-soft), var(--ember)); color: #1a1108; box-shadow: 0 6px 20px rgba(255,158,87,0.4); }
+  .caret { display: inline-block; width: 2px; height: 1.15em; background: var(--ember); vertical-align: -0.2em; animation: blink 1.05s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* ---------- emphasized cursor: halo + click ripple ----------
+     The cursor is a lit character, not a pointer: an ember halo keeps the
+     eye on it at any zoom level, and every click fires an expanding ring. */
+  #cursor {
+    position: absolute; z-index: 45; left: 0; top: 0; opacity: 0;
+    transition: transform 1s cubic-bezier(0.3, 0, 0.2, 1), opacity 0.3s;
+  }
+  #cursor .halo {
+    position: absolute; left: -34px; top: -32px; width: 88px; height: 88px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(255,158,87,0.28) 0%, rgba(255,158,87,0.1) 45%, transparent 70%);
+    animation: breathe 2.2s ease-in-out infinite;
+  }
+  @keyframes breathe { 0%, 100% { transform: scale(1); opacity: 0.9; } 50% { transform: scale(1.12); opacity: 1; } }
+  #cursor svg { position: relative; width: 30px; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.65)); }
+  #cursor .ring {
+    position: absolute; left: 10px; top: 10px; width: 14px; height: 14px; border-radius: 50%;
+    border: 3px solid var(--ember-soft); opacity: 0; transform: translate(-50%, -50%) scale(0.4);
+    pointer-events: none;
+  }
+  #cursor.click .ring { animation: ripple 0.6s ease-out; }
+  @keyframes ripple {
+    0% { opacity: 0.95; transform: translate(-50%, -50%) scale(0.4); }
+    100% { opacity: 0; transform: translate(-50%, -50%) scale(4.2); }
+  }
+  #cursor.press svg { transform: scale(0.86); transform-origin: 6px 4px; }
+
+  /* ⌘V keycap hint */
+  #kbdpaste {
+    position: absolute; z-index: 46; display: flex; gap: 8px; align-items: center;
+    opacity: 0; transform: translateY(8px); transition: all 0.35s;
+  }
+  #kbdpaste.on { opacity: 1; transform: none; }
+  #kbdpaste .k {
+    min-width: 44px; height: 44px; padding: 0 12px; border-radius: 10px; display: grid; place-items: center;
+    font-size: 19px; font-weight: 650; color: var(--txt);
+    background: linear-gradient(180deg, rgba(255,255,255,0.17), rgba(255,255,255,0.07));
+    border: 1px solid rgba(255,255,255,0.24);
+    box-shadow: 0 8px 22px rgba(0,0,0,0.5), inset 0 -4px 0 rgba(0,0,0,0.3);
+    backdrop-filter: blur(16px);
+  }
+  #kbdpaste.press .k { transform: translateY(4px); box-shadow: 0 3px 10px rgba(0,0,0,0.5), inset 0 -1px 0 rgba(0,0,0,0.3); }
+  #kbdpaste .pl { font-size: 20px; color: var(--dim); }
+
+  /* ---------- caption strip (outside camera — never zoomed) ---------- */
+  #cap {
+    position: absolute; z-index: 60; left: 50%; bottom: 64px; transform: translate(-50%, 16px);
+    max-width: 1100px; text-align: center;
+    font-size: 30px; font-weight: 650; letter-spacing: -0.015em; line-height: 1.3;
+    padding: 16px 34px; border-radius: 100px;
+    background: rgba(8, 10, 17, 0.66); backdrop-filter: blur(26px);
+    border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 18px 60px rgba(0,0,0,0.5);
+    opacity: 0; transition: all 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  #cap.on { opacity: 1; transform: translate(-50%, 0); }
+  #cap em { font-style: normal; color: var(--ember-soft); }
+
+  /* ---------- title / end cards ---------- */
+  .card {
+    position: absolute; inset: 0; z-index: 80; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center;
+    background: radial-gradient(1200px 800px at 50% 120%, rgba(201, 111, 46, 0.22), transparent 60%), var(--ink0);
+    opacity: 0; pointer-events: none; transition: opacity 0.9s ease;
+  }
+  .card.on { opacity: 1; }
+  .card .mark { margin-bottom: 34px; }
+  .card .word { font-size: 84px; font-weight: 750; letter-spacing: -0.045em; }
+  .card .word i { font-style: normal; color: var(--ember); }
+  .card .word small { font-size: 42px; font-weight: 500; color: var(--dim); margin-left: 16px; letter-spacing: -0.02em; }
+  .card .tag { font-family: var(--serif); font-style: italic; font-size: 34px; color: var(--dim); margin-top: 20px; }
+  .card .tag b { color: var(--txt); font-weight: 500; }
+  .card .url {
+    margin-top: 52px; font-size: 19px; font-weight: 600; letter-spacing: 0.04em;
+    color: var(--ember-soft); border: 1px solid rgba(255, 158, 87, 0.35);
+    padding: 12px 28px; border-radius: 100px; background: rgba(255, 158, 87, 0.07);
+  }
+  .card .rise { opacity: 0; transform: translateY(18px); transition: all 0.8s cubic-bezier(0.22, 1, 0.36, 1); }
+  .card.on .rise { opacity: 1; transform: none; }
+  .card.on .rise.d1 { transition-delay: 0.25s; } .card.on .rise.d2 { transition-delay: 0.55s; }
+  .card.on .rise.d3 { transition-delay: 0.9s; }
+
+  /* ---------- HUD ---------- */
+  #hud {
+    position: absolute; z-index: 100; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    width: 640px; padding: 40px 44px; border-radius: 26px; text-align: left;
+    background: rgba(10, 12, 20, 0.86); backdrop-filter: blur(30px);
+    border: 1px solid rgba(255,255,255,0.12); box-shadow: 0 40px 120px rgba(0,0,0,0.7);
+    transition: opacity 0.4s;
+  }
+  #hud.off { opacity: 0; pointer-events: none; }
+  #hud h1 { font-size: 25px; letter-spacing: -0.02em; display: flex; align-items: center; gap: 14px; margin-bottom: 6px; }
+  #hud .sub { color: var(--dim); font-size: 15.5px; line-height: 1.55; margin-bottom: 26px; }
+  #hud .krow { display: flex; align-items: center; gap: 14px; padding: 9px 0; font-size: 16px; color: #d5dae4; }
+  #hud .k { font-family: var(--mono); font-size: 14px; min-width: 74px; text-align: center; padding: 6px 10px; border-radius: 8px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); }
+  #hud .k.a { color: #1a1108; background: linear-gradient(180deg, var(--ember-soft), var(--ember)); border-color: transparent; font-weight: 700; }
+  #hud .note { margin-top: 24px; font-size: 13.5px; color: var(--faint); line-height: 1.55; }
+</style>
+
+<div id="frame">
+  <div id="stage">
+    <div id="camera">
+      <div class="wallpaper"></div>
+
+      <div class="menubar">
+        <svg width="17" height="17" viewBox="0 0 48 48" style="opacity:.9"><g stroke="#f3f5f9" stroke-width="5" fill="none" stroke-linecap="round"><path d="M6 16 V10 a4 4 0 0 1 4-4 H16"/><path d="M32 6 h6 a4 4 0 0 1 4 4 v6"/><path d="M42 32 v6 a4 4 0 0 1-4 4 H32"/><path d="M16 42 h-6 a4 4 0 0 1-4-4 v-6"/></g><circle cx="24" cy="24" r="7" fill="#f3f5f9"/></svg>
+        <span class="appname">Slack</span>
+        <span class="mitem">File</span><span class="mitem">Edit</span><span class="mitem">View</span><span class="mitem">Window</span>
+        <span class="spacer"></span>
+        <span class="mitem" style="letter-spacing:1px">&#9678;</span>
+        <span class="clock" id="clock">Thu 4:52 PM</span>
+      </div>
+
+      <!-- Slack-style window -->
+      <div class="window" id="slackwin">
+        <div class="titlebar"><div class="lights"><i></i><i></i><i></i></div><div class="wintitle">Acme HQ — #customer-eng</div></div>
+        <div class="slackui">
+          <div class="schan">
+            <div class="ws"><span class="wbadge">A</span> Acme HQ</div>
+            <div class="grp">Channels</div>
+            <div class="chn"><span class="h">#</span> general</div>
+            <div class="chn"><span class="h">#</span> product-spec</div>
+            <div class="chn sel"><span class="h">#</span> customer-eng</div>
+            <div class="chn"><span class="h">#</span> deploys</div>
+            <div class="grp">Direct messages</div>
+            <div class="chn"><span class="ic"></span> Mara Voss</div>
+            <div class="chn"><span class="ic" style="background:var(--faint)"></span> Priya Nair</div>
+          </div>
+          <div class="smain">
+            <div class="shead"><b># customer-eng</b><span class="topic">customer questions → answers with sources · SLA 15 min</span></div>
+            <div class="smsgs" id="smsgs">
+              <div class="msg">
+                <div class="av" style="background:#8fb7e8">P</div>
+                <div><span class="nm">Priya Nair</span><span class="tm">4:31 PM</span>
+                  <div class="tx">updated the onboarding one-pager — link in #product-spec</div>
+                </div>
+              </div>
+              <div class="msg">
+                <div class="av" style="background:#9fdcb8">D</div>
+                <div><span class="nm">Dev Okafor</span><span class="tm">4:40 PM</span>
+                  <div class="tx">deploy 2.3.1 is out, all checks green ✅</div>
+                </div>
+              </div>
+              <div class="msg" id="maramsg" style="display:none">
+                <div class="av" style="background:#f0b6a4">M</div>
+                <div><span class="nm">Mara Voss</span><span class="tm">4:52 PM</span>
+                  <div class="tx">on a call with <span class="hl">Delta Freight</span> right now — does Pro include <span class="hl">SAML SSO</span>? and what’s the <span class="hl">API rate limit</span>? need it in ~5 min 🙏</div>
+                  <div class="react" id="mreact">🙌 <span>1</span></div>
+                </div>
+              </div>
+              <div class="msg" id="youmsg" style="display:none">
+                <div class="av" style="background:linear-gradient(140deg,var(--ember-soft),var(--ember))">Y</div>
+                <div><span class="nm">You</span><span class="tm">4:54 PM</span>
+                  <div class="tx" id="youtx"></div>
+                  <div class="viachip">✦ answered with vershot specs · spec v2.3</div>
+                </div>
+              </div>
+              <div class="typing" id="typing"><div class="td"><i></i><i></i><i></i></div> Mara Voss is typing…</div>
+            </div>
+            <div class="composer" id="composer">
+              <div class="cin" id="cin"><span class="ph">Message #customer-eng</span></div>
+              <div class="crow"><span>＋</span><span>Aa</span><span>😊</span><span>@</span><span class="spacer"></span><div id="sendbtn">➤</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- phone: the mobile web app -->
+      <div id="phone">
+        <div class="screen">
+          <div class="island"></div>
+          <div class="sbar"><span>4:52</span><span class="sig">●●●&nbsp; 5G&nbsp; ▮▮▮</span></div>
+          <div class="urlrow"><div class="urlpill"><span class="lock"></span> specs.vershot.app</div></div>
+          <div class="apphead">
+            <svg width="24" height="24" viewBox="0 0 48 48"><g stroke="#ff9e57" stroke-width="4.5" fill="none" stroke-linecap="round"><path d="M6 16 V10 a4 4 0 0 1 4-4 H16"/><path d="M32 6 h6 a4 4 0 0 1 4 4 v6"/><path d="M42 32 v6 a4 4 0 0 1-4 4 H32"/><path d="M16 42 h-6 a4 4 0 0 1-4-4 v-6"/></g><circle cx="24" cy="24" r="6.5" fill="#ff9e57"/></svg>
+            <span class="an">vershot <i>specs</i></span>
+            <span class="vpill">spec v2.3 · synced</span>
+          </div>
+          <div class="appbody">
+            <div class="hello" id="phello">Ask anything about the <b style="color:var(--txt)">Acme</b> product spec — plans, limits, security, SLAs. Answers cite the exact section.</div>
+            <div class="sugs" id="psugs">
+              <span class="sug">SSO &amp; SCIM</span><span class="sug">API rate limits</span><span class="sug">Data residency</span><span class="sug">Uptime SLA</span>
+            </div>
+            <div class="qbub" id="qbub">Does Pro include SAML SSO? What’s the API rate limit?</div>
+            <div id="ploading"><div class="dots"><i></i><i></i><i></i></div><span class="lt">reading spec v2.3…</span></div>
+            <div id="acard">
+              <div id="ans"></div>
+              <div id="srcchip"><div class="doc"></div><span>spec v2.3 — security/auth.md §4 · api/limits.md §2</span></div>
+              <div id="actrow">
+                <div id="copybtn"><span id="cbi">⧉</span><span id="cbt">Copy answer</span></div>
+                <div class="ghostbtn">↗ Share</div>
+              </div>
+            </div>
+            <div class="pinrow">
+              <div id="pinput"><span class="ph">Ask the spec…</span></div>
+              <div id="askbtn">➤</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- emphasized cursor -->
+      <div id="cursor">
+        <div class="halo"></div>
+        <span class="ring"></span>
+        <svg viewBox="0 0 24 24"><path d="M5 2 L5 19 L9.5 15.5 L12.5 22 L15 21 L12 14.5 L18 14.5 Z" fill="#fff" stroke="#000" stroke-width="1.4"/></svg>
+      </div>
+
+      <!-- ⌘V hint -->
+      <div id="kbdpaste"><span class="k">⌘</span><span class="pl">+</span><span class="k">V</span></div>
+    </div><!-- /camera -->
+
+    <div id="cap"></div>
+
+    <!-- title card -->
+    <div class="card" id="card-title">
+      <div class="mark rise"><svg width="92" height="92" viewBox="0 0 48 48"><g stroke="#ff9e57" stroke-width="4" fill="none" stroke-linecap="round"><path d="M6 16 V10 a4 4 0 0 1 4-4 H16"/><path d="M32 6 h6 a4 4 0 0 1 4 4 v6"/><path d="M42 32 v6 a4 4 0 0 1-4 4 H32"/><path d="M16 42 h-6 a4 4 0 0 1-4-4 v-6"/></g><circle cx="24" cy="24" r="6.5" fill="#ff9e57"/></svg></div>
+      <div class="word rise d1">ver<i>shot</i><small>specs</small></div>
+      <div class="tag rise d2">Your spec knows the answer. <b>Nobody can find it.</b></div>
+    </div>
+
+    <!-- end card -->
+    <div class="card" id="card-end">
+      <div class="mark rise"><svg width="92" height="92" viewBox="0 0 48 48"><g stroke="#ff9e57" stroke-width="4" fill="none" stroke-linecap="round"><path d="M6 16 V10 a4 4 0 0 1 4-4 H16"/><path d="M32 6 h6 a4 4 0 0 1 4 4 v6"/><path d="M42 32 v6 a4 4 0 0 1-4 4 H32"/><path d="M16 42 h-6 a4 4 0 0 1-4-4 v-6"/></g><circle cx="24" cy="24" r="6.5" fill="#ff9e57"/></svg></div>
+      <div class="word rise d1">ver<i>shot</i><small>specs</small></div>
+      <div class="tag rise d2">Ask the spec. <b>Ship the answer.</b></div>
+      <div class="url rise d3">vershot.app — join the waitlist</div>
+    </div>
+
+    <!-- recording HUD -->
+    <div id="hud">
+      <h1><svg width="26" height="26" viewBox="0 0 48 48"><g stroke="#ff9e57" stroke-width="4.5" fill="none" stroke-linecap="round"><path d="M6 16 V10 a4 4 0 0 1 4-4 H16"/><path d="M32 6 h6 a4 4 0 0 1 4 4 v6"/><path d="M42 32 v6 a4 4 0 0 1-4 4 H32"/><path d="M16 42 h-6 a4 4 0 0 1-4-4 v-6"/></g><circle cx="24" cy="24" r="6.5" fill="#ff9e57"/></svg> vershot specs — spec-to-slack demo</h1>
+      <div class="sub">A recordable simulation: a spec question lands in Slack, the mobile web app answers it, and copy → paste ships it back — with cinematic zooms and a spotlight cursor <b style="color:var(--ember-soft)">baked into the page</b>. Go fullscreen, start recording, press <b style="color:var(--ember-soft)">A</b>.</div>
+      <div class="krow"><span class="k a">A</span> autoplay the full ~60 s demo (one take, captions burned in)</div>
+      <div class="krow"><span class="k">space</span> step through beat by beat (for stills / re-takes)</div>
+      <div class="krow"><span class="k">R</span> reset to the start</div>
+      <div class="krow"><span class="k">F</span> toggle fullscreen &nbsp;·&nbsp; <span class="k">H</span> show this help</div>
+      <div class="note">Zoom &amp; cursor emphasis are CSS transforms inside the prototype — no Screen Studio needed. Production guide: docs/demo-video.md. Everything on screen is synthetic.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s);
+  const stage = $('#stage');
+
+  // scale 1920x1080 stage to viewport
+  function fit() {
+    const s = Math.min(innerWidth / 1920, innerHeight / 1080);
+    stage.style.transform = `scale(${s})`;
+  }
+  addEventListener('resize', fit); fit();
+
+  // ---- cancellable timeline ----
+  let gen = 0;
+  const CANCEL = Symbol('cancel');
+  function wait(ms) {
+    const g = gen;
+    return new Promise((res, rej) => setTimeout(() => (g === gen ? res() : rej(CANCEL)), ms));
+  }
+  async function typeText(el, text, cps = 26) {
+    el.textContent = '';
+    const caret = document.createElement('span'); caret.className = 'caret';
+    el.appendChild(caret);
+    for (const ch of text) {
+      caret.insertAdjacentText('beforebegin', ch);
+      await wait(1000 / cps + Math.random() * 22);
+    }
+    await wait(220); caret.remove();
+  }
+  async function streamWords(el, html, wps = 7.5) {
+    el.innerHTML = '';
+    const tmp = document.createElement('div'); tmp.innerHTML = html;
+    const parts = [];
+    tmp.childNodes.forEach((n) => {
+      if (n.nodeType === 3) n.textContent.split(/(\s+)/).forEach((w) => w && parts.push(document.createTextNode(w)));
+      else parts.push(n.cloneNode(true));
+    });
+    for (const p of parts) {
+      const s = document.createElement('span'); s.appendChild(p); el.appendChild(s);
+      requestAnimationFrame(() => s.classList.add('w'));
+      if (p.textContent.trim()) await wait(1000 / wps);
+    }
+  }
+  function caption(text) {
+    const c = $('#cap');
+    if (!text) { c.classList.remove('on'); return; }
+    c.classList.remove('on');
+    setTimeout(() => { if (c) { c.innerHTML = text; c.classList.add('on'); } }, 300);
+  }
+
+  // ---- camera: zoom to a stage point (x, y) at scale s ----
+  // transform-origin is stage centre; translate first (scaled), so the target
+  // point lands dead-centre. The centre is clamped so the frame never shows
+  // past the stage edge (no black bars while zoomed).
+  function cam(x, y, s = 1, ms = 1700) {
+    const hw = 960 / s, hh = 540 / s;
+    const cx = Math.min(Math.max(x, hw), 1920 - hw);
+    const cy = Math.min(Math.max(y, hh), 1080 - hh);
+    const c = $('#camera');
+    c.style.transitionDuration = ms + 'ms';
+    c.style.transform = `scale(${s}) translate(${960 - cx}px, ${540 - cy}px)`;
+  }
+
+  // ---- cursor: move / click with halo + ripple ----
+  function moveCursor(x, y, ms = 1000) {
+    const c = $('#cursor');
+    c.style.transitionDuration = ms + 'ms, 0.3s';
+    c.style.transform = `translate(${x}px, ${y}px)`;
+  }
+  function showCursor(x, y) {
+    const c = $('#cursor');
+    c.style.transitionDuration = '0ms, 0.3s';
+    c.style.transform = `translate(${x}px, ${y}px)`;
+    c.style.opacity = 1;
+  }
+  async function clickCursor() {
+    const c = $('#cursor');
+    c.classList.add('press', 'click');
+    await wait(160);
+    c.classList.remove('press');
+    await wait(440);
+    c.classList.remove('click');
+  }
+
+  function slackMsg(id) {
+    const m = $(id);
+    m.style.display = 'flex';
+    m.classList.add('pop');
+  }
+
+  // ---- beats ----
+  const beats = [
+
+    // 0 · title card (~5 s)
+    async () => {
+      $('#card-title').classList.add('on');
+      await wait(5000);
+      $('#card-title').classList.remove('on');
+      await wait(900);
+    },
+
+    // 1 · slack: the question lands (~10 s)
+    async () => {
+      $('#slackwin').classList.add('on');
+      await wait(1000);
+      caption('4:52 PM. Sales needs the <em>exact spec</em> — in five minutes.');
+      $('#typing').classList.add('on');
+      await wait(2200);
+      $('#typing').classList.remove('on');
+      slackMsg('#maramsg');
+      cam(700, 680, 1.35);
+      await wait(5200);
+      caption('');
+      await wait(600);
+    },
+
+    // 2 · phone: ask the spec (~22 s)
+    async () => {
+      cam(1545, 552, 1.22);
+      $('#phone').classList.add('on');
+      caption('Open the spec assistant — <em>mobile web, no install.</em>');
+      await wait(2400);
+
+      // tap the input and type the question
+      showCursor(1490, 935);
+      await wait(500);
+      await clickCursor();
+      await wait(200);
+      $('#pinput').classList.add('tail');
+      await typeText($('#pinput'), 'Does Pro include SAML SSO? What’s the API rate limit?', 21);
+      $('#askbtn').classList.add('ready');
+      caption('Ask the spec — <em>in plain English.</em>');
+      moveCursor(1702, 930, 700);
+      await wait(850);
+      await clickCursor();
+
+      // question posts, loading
+      $('#pinput').classList.remove('tail');
+      $('#pinput').innerHTML = '<span class="ph">Ask the spec…</span>';
+      $('#askbtn').classList.remove('ready');
+      $('#psugs').style.display = 'none';
+      $('#phello').style.display = 'none';
+      $('#qbub').classList.add('on');
+      $('#cursor').style.opacity = 0;
+      await wait(400);
+      $('#ploading').classList.add('on');
+      await wait(2100);
+      $('#ploading').classList.remove('on');
+
+      // answer streams in
+      cam(1545, 660, 1.45);
+      caption('The spec answers — <em>with the source.</em>');
+      $('#acard').classList.add('on');
+      await wait(150);
+      await streamWords($('#ans'),
+        'Yes — <b>SAML SSO is included in Pro</b> (Okta, Entra ID, Google). The API allows <b>600 requests/min</b> per workspace, bursting to 1,200 for 60 s; over-limit calls return 429 with Retry-After.', 8);
+      await wait(300);
+      $('#srcchip').classList.add('on');
+      await wait(1600);
+      $('#actrow').classList.add('on');
+      await wait(1400);
+      caption('');
+      await wait(400);
+    },
+
+    // 3 · copy (~6 s)
+    async () => {
+      cam(1545, 640, 1.6);
+      caption('One tap — <em>copy the answer.</em>');
+      showCursor(1610, 480);
+      await wait(400);
+      moveCursor(1440, 596, 900);
+      await wait(1000);
+      await clickCursor();
+      $('#copybtn').classList.add('done');
+      $('#cbi').textContent = '✓';
+      $('#cbt').textContent = 'Copied';
+      await wait(2400);
+      $('#cursor').style.opacity = 0;
+      caption('');
+      await wait(400);
+    },
+
+    // 4 · slack: paste + send (~15 s)
+    async () => {
+      cam(795, 850, 1.45);
+      caption('Paste it where the question lives — <em>receipt included.</em>');
+      await wait(1800);
+
+      // click the composer
+      showCursor(600, 780);
+      await wait(300);
+      moveCursor(700, 880, 800);
+      await wait(900);
+      await clickCursor();
+      $('#composer').classList.add('focus');
+      $('#cin').innerHTML = '<span class="caret"></span>';
+      await wait(500);
+
+      // ⌘V
+      const kp = $('#kbdpaste');
+      kp.style.left = '900px'; kp.style.top = '790px';
+      kp.classList.add('on');
+      await wait(500);
+      kp.classList.add('press');
+      await wait(180);
+      kp.classList.remove('press');
+      $('#cin').classList.add('flash');
+      $('#cin').innerHTML = 'Yes — Pro includes <b>SAML SSO</b> (Okta, Entra ID, Google). API: <b>600 req/min</b> per workspace, burst 1,200 for 60 s; overages return 429 + Retry-After.';
+      $('#sendbtn').classList.add('ready');
+      await wait(500);
+      kp.classList.remove('on');
+      await wait(1400);
+
+      // send
+      moveCursor(1195, 906, 800);
+      await wait(900);
+      await clickCursor();
+      $('#cin').classList.remove('flash');
+      $('#cin').innerHTML = '<span class="ph">Message #customer-eng</span>';
+      $('#composer').classList.remove('focus');
+      $('#sendbtn').classList.remove('ready');
+      $('#youtx').innerHTML = 'Yes — Pro includes <span class="hl">SAML SSO</span> (Okta, Entra ID, Google). API: <span class="hl">600 req/min</span> per workspace, burst 1,200 for 60 s; overages return 429 + Retry-After.';
+      slackMsg('#youmsg');
+      $('#clock').textContent = 'Thu 4:54 PM';
+      $('#cursor').style.opacity = 0;
+      await wait(1600);
+      $('#mreact').classList.add('on');
+      await wait(2600);
+
+      // pull back for the wide shot
+      cam(960, 540, 1);
+      caption('Question to <em>cited answer</em> — under two minutes.');
+      await wait(3400);
+      caption('');
+      await wait(700);
+    },
+
+    // 5 · end card (holds)
+    async () => {
+      $('#card-end').classList.add('on');
+      await wait(6000);
+    },
+  ];
+
+  // ---- control ----
+  let running = false, next = 0, auto = false;
+  const hud = $('#hud');
+
+  async function runBeat(i) {
+    if (running || i >= beats.length) return;
+    running = true; hud.classList.add('off');
+    const g = gen;
+    try { await beats[i](); if (g === gen) next = i + 1; }
+    catch (e) { if (e !== CANCEL) throw e; }
+    finally { if (g === gen) running = false; }
+  }
+  async function autoplay() {
+    if (running) return;
+    reset(false); auto = true; hud.classList.add('off');
+    const g = gen;
+    for (let i = 0; i < beats.length; i++) {
+      await runBeat(i);
+      if (g !== gen) return;
+    }
+    auto = false;
+    window.__demoDone = true; // recording rigs wait on this
+  }
+  function reset(showHud = true) {
+    gen++; running = false; auto = false; next = 0;
+    window.__demoDone = false;
+    ['#card-title', '#card-end', '#slackwin', '#phone', '#cap', '#typing', '#mreact',
+     '#qbub', '#ploading', '#acard', '#srcchip', '#actrow', '#kbdpaste']
+      .forEach((s) => $(s).classList.remove('on', 'press'));
+    $('#maramsg').style.display = 'none';
+    $('#youmsg').style.display = 'none';
+    $('#youtx').innerHTML = '';
+    $('#copybtn').classList.remove('done');
+    $('#cbi').textContent = '⧉'; $('#cbt').textContent = 'Copy answer';
+    $('#askbtn').classList.remove('ready');
+    $('#sendbtn').classList.remove('ready');
+    $('#composer').classList.remove('focus');
+    $('#cin').classList.remove('flash');
+    $('#cin').innerHTML = '<span class="ph">Message #customer-eng</span>';
+    $('#pinput').classList.remove('tail');
+    $('#pinput').innerHTML = '<span class="ph">Ask the spec…</span>';
+    $('#psugs').style.display = '';
+    $('#phello').style.display = '';
+    $('#cursor').style.opacity = 0;
+    $('#cursor').classList.remove('press', 'click');
+    $('#clock').textContent = 'Thu 4:52 PM';
+    const c = $('#camera');
+    c.style.transitionDuration = '0ms';
+    c.style.transform = 'none';
+    hud.classList.toggle('off', !showHud);
+  }
+
+  addEventListener('keydown', (e) => {
+    if (e.key === 'a' || e.key === 'A') { e.preventDefault(); autoplay(); }
+    else if (e.key === ' ' || e.key === 'ArrowRight') { e.preventDefault(); if (!auto) runBeat(next); }
+    else if (e.key === 'r' || e.key === 'R') reset(true);
+    else if (e.key === 'h' || e.key === 'H') hud.classList.toggle('off');
+    else if (e.key === 'f' || e.key === 'F') {
+      document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+    }
+  });
+})();
+</script>
+</body>
+</html>
