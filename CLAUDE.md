@@ -13,6 +13,7 @@ Definitions of unknowns / unknown-unknowns and how we surface them:
 └── src
     ├── backend // all backend projects
     └── frontend // all frontend projects
+       ├── demo // Self-contained recordable concept demo (see docs/demo-video.md).
        └── lp // This is the landing page repo.
 ```
 
