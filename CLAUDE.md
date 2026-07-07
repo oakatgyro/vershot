@@ -1,5 +1,10 @@
 # CLAUDE.md
 
+## Project Knowledge
+
+Definitions of unknowns / unknown-unknowns and how we surface them:
+[docs/unknown-unknowns.md](docs/unknown-unknowns.md).
+
 ## Folder Structure
 
 ```bash
