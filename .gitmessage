@@ -1,0 +1,20 @@
+# <type>(<scope>): <subject>     (max 72 chars; imperative mood)
+#
+# Types:
+#   feat     A new feature
+#   fix      A bug fix
+#   docs     Documentation only changes
+#   style    Formatting; no code change
+#   refactor Code change that neither fixes a bug nor adds a feature
+#   perf     Performance improvement
+#   test     Adding or correcting tests
+#   build    Build system or external deps (npm, uv, terraform, etc.)
+#   ci       CI configuration files and scripts
+#   chore    Other changes that don't modify src or test files
+#   revert   Reverts a previous commit
+#
+# Scope (optional): backend, frontend/lp, infra, deps, ...
+#
+# Body (optional): explain what and why, not how. Wrap at 72.
+#
+# Footer (optional): BREAKING CHANGE: <desc>   or   Closes #123

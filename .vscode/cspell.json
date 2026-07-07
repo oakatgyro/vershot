@@ -1,0 +1,34 @@
+{
+  "ignorePaths": [
+    ".claude/skills/**",
+    "node_modules/**",
+    ".git/**"
+  ],
+  "words": [
+    "afplay",
+    "apigatewayv",
+    "esbenp",
+    "netrc",
+    "pypirc",
+    "pytest",
+    "quickstarts",
+    "Strikethrough",
+    "supabase",
+    "tflint",
+    "tfsec",
+    "tfstate",
+    "tfvars",
+    "untaint",
+    "Verdana",
+    "pdfimages",
+    "pdfplumber",
+    "pdftk",
+    "pdftotext",
+    "poppler",
+    "pypdf",
+    "pypdfium",
+    "pytesseract",
+    "qpdf",
+    "reportlab"
+  ]
+}

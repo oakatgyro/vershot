@@ -1,0 +1,49 @@
+name: ci-lp
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  ci-lp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Detect changes
+        id: changes
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            lp:
+              - 'src/frontend/lp/**'
+              - '.github/workflows/ci-lp.yml'
+
+      - name: Skip-success (no lp changes)
+        if: steps.changes.outputs.lp != 'true'
+        run: echo "No changes under src/frontend/lp; reporting success."
+
+      - uses: actions/setup-node@v4
+        if: steps.changes.outputs.lp == 'true'
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: src/frontend/lp/package-lock.json
+
+      - name: Install
+        if: steps.changes.outputs.lp == 'true'
+        working-directory: src/frontend/lp
+        run: npm ci
+
+      - name: Lint
+        if: steps.changes.outputs.lp == 'true'
+        working-directory: src/frontend/lp
+        run: npx eslint
+
+      - name: Typecheck
+        if: steps.changes.outputs.lp == 'true'
+        working-directory: src/frontend/lp
+        run: npx tsc --noEmit

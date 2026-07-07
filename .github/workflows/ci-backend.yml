@@ -1,0 +1,48 @@
+name: ci-backend
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  ci-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Detect changes
+        id: changes
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            backend:
+              - 'src/backend/**'
+              - '.github/workflows/ci-backend.yml'
+
+      - name: Skip-success (no backend changes)
+        if: steps.changes.outputs.backend != 'true'
+        run: echo "No changes under src/backend; reporting success."
+
+      - uses: astral-sh/setup-uv@v4
+        if: steps.changes.outputs.backend == 'true'
+        with:
+          python-version: '3.14'
+          enable-cache: true
+
+      - name: Install
+        if: steps.changes.outputs.backend == 'true'
+        working-directory: src/backend
+        run: uv sync --frozen
+
+      - name: Lint
+        if: steps.changes.outputs.backend == 'true'
+        working-directory: src/backend
+        run: uv run ruff check
+
+      - name: Typecheck
+        if: steps.changes.outputs.backend == 'true'
+        working-directory: src/backend
+        run: uv run mypy .
